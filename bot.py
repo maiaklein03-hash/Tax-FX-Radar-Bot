@@ -305,7 +305,7 @@ TEXTO OFICIAL
     ultimo = None
     for intento in range(4):
         try:
-            r = cliente.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            r = cliente.models.generate_content(model="gemini-3.6-flash", contents=prompt)
             if r.text:
                 return r.text.strip()
         except Exception as error:
