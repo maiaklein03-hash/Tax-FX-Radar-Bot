@@ -1,3 +1,4 @@
+
 import io
 import json
 import os
@@ -67,20 +68,19 @@ CLAVES_TAX = (
 
 MAPA_MODELOS = """
 MODELO ON CORPORATIVA
-- Controles de Cambio: régimen/bandas; requisitos generales de acceso al MLC;
-  activos externos líquidos; DDJJ y restricciones MEP/CCL; importaciones;
-  ingreso y liquidación de deuda; pagos de capital e intereses; plazo mínimo;
-  precancelaciones y refinanciaciones; canjes; dividendos; RIGI; exportaciones;
-  operaciones con valores y normas CNV vinculadas a colocación/integración.
+- Controles de Cambio: emisión, colocación, suscripción e integración; ingreso y
+  liquidación del producido; negociación de ON; restricciones MEP/CCL que incidan
+  directamente en esas operaciones; acceso al MLC para capital e intereses;
+  plazos mínimos; precancelación, refinanciación y canje de ON.
 - Carga Tributaria: artículo 36 y 36 bis Ley de ON; Ganancias sobre intereses y
-  resultados para residentes, sociedades y beneficiarios del exterior; IVA;
-  Bienes Personales/responsable sustituto; Débitos y Créditos; jurisdicciones no
-  cooperantes o de baja/nula tributación; precios de transferencia; CDI y MLI.
+  resultados por suscripción, tenencia, cobro o disposición; IVA; Bienes
+  Personales/responsable sustituto; Débitos y Créditos aplicable a los pagos;
+  jurisdicciones no cooperantes; CDI/MLI cuando alteren el tratamiento de ON.
 
 MODELO TÍTULOS DE DEUDA PROVINCIALES
-- Cambiario: moneda/tipo de cambio; ingreso de fondos; egresos; pagos de capital
-  e intereses de deuda externa; precancelación/refinanciación; canje y arbitraje;
-  MEP/CCL; dividendos cuando sea contextual; operaciones CNV con valores.
+- Cambiario: emisión e integración; ingreso y liquidación del producido;
+  negociación; pagos de capital e intereses; precancelación/refinanciación;
+  canje/arbitraje y MEP/CCL directamente vinculados con los títulos.
 - Impositivo: Ganancias sobre intereses y ganancias de capital; IVA; Bienes
   Personales y exención de títulos públicos; Débitos y Créditos; tasa de justicia;
   jurisdicciones no cooperantes/baja tributación; CDI/MLI; IIBB; recaudación
@@ -266,14 +266,38 @@ Sos abogado argentino especializado en debt capital markets, regulación
 cambiaria y tributación de valores negociables. Compará la norma oficial con el
 mapa de dos capítulos modelo de prospectos que figura abajo.
 
-Primero decidí si la norma obliga o aconseja revisar materialmente alguno de esos
-capítulos. Una mera estadística, tasa diaria, estado contable, fe de erratas sin
-efecto, noticia institucional o norma bancaria ajena a emisiones NO es relevante.
-No infieras efectos que no surjan del texto.
+El bot no es un newsletter regulatorio. Solo existe relevancia si la norma puede
+exigir modificar una afirmación del prospecto o suplemento acerca de:
 
-Si NO es relevante, respondé únicamente: NO_RELEVANTE
+1. emisión, colocación, suscripción o integración de ON/títulos;
+2. negociación o liquidación de esos valores;
+3. ingreso y liquidación en el MLC del producido de la emisión;
+4. acceso al MLC para pagar capital o intereses, incluso precancelación,
+   refinanciación o canje; o
+5. consecuencias tributarias de emitir, suscribir, tener, cobrar, vender,
+   transferir o ejecutar las ON/títulos.
 
-Si SÍ es relevante, redactá un mensaje de hasta 1.450 caracteres con esta forma:
+Aplicá estrictamente estas reglas:
+- Debe existir un nexo directo con al menos uno de esos cinco puntos. Que una
+  norma sea cambiaria, tributaria, financiera o interesante para el mercado no
+  alcanza.
+- La mera mención, remisión o cita del punto 3.5 del T.O. de Exterior y Cambios
+  no alcanza. Identificá qué inciso o condición cambia y cómo incide en la
+  emisión, negociación, liquidación del producido o servicio de deuda.
+- Si regula exclusivamente RIGI, VPU, proyectos adheridos o destinos RIGI,
+  respondé NO_RELEVANTE. No presumas que la operación está bajo RIGI. Esas normas
+  se incorporarán únicamente cuando exista una operación RIGI identificada.
+- Son NO_RELEVANTES las normas sobre bandas o régimen macroeconómico, comercio
+  exterior, dividendos, personas humanas, regulación bancaria prudencial o
+  sectores especiales si no cambian directamente uno de los cinco puntos.
+- En Tax, excluí reformas generales que no alteren el tratamiento del emisor,
+  inversor, tenedor, beneficiario o pagos específicamente vinculados a ON/títulos.
+- Una incidencia contextual, eventual, remota o meramente informativa es
+  NO_RELEVANTE.
+
+Si no supera esta prueba, respondé únicamente: NO_RELEVANTE
+
+Si la supera, redactá un mensaje de hasta 1.350 caracteres con esta forma:
 
 ACTUALIZACIÓN TAX & CAMBIARIA — [ORGANISMO Y NORMA]
 [Título o tema en una línea]
@@ -281,8 +305,8 @@ ACTUALIZACIÓN TAX & CAMBIARIA — [ORGANISMO Y NORMA]
 • Cambio: qué modificó concretamente.
 • Prospecto alcanzado: ON / Provincial / Ambos.
 • Apartado a revisar: nombre preciso del apartado del modelo.
-• Impacto: qué afirmación, requisito, plazo, tasa, exención o referencia podría
-  necesitar actualización.
+• Texto afectado: qué afirmación, requisito, plazo, tasa, exención o referencia
+  concreta podría necesitar actualización.
 • Vigencia: fecha y transición; si no surge, decirlo.
 • Acción sugerida: verificación concreta y breve, sin redactar texto legal nuevo.
 
