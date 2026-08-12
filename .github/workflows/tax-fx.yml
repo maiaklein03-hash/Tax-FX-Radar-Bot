@@ -10,8 +10,7 @@ on:
         type: boolean
 
   schedule:
-    # 09:07 de Buenos Aires, de lunes a viernes
-    - cron: "7 12 * * 1-5"
+  - cron: "7 12,21 * * 1-5"
 
 permissions:
   contents: write
