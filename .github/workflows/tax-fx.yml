@@ -8,9 +8,9 @@ on:
         required: true
         default: false
         type: boolean
-
   schedule:
-  - cron: "7 12,21 * * 1-5"
+    # 09:07 de Buenos Aires, lunes a viernes (UTC-3 todo el año).
+    - cron: "7 12 * * 1-5"
 
 permissions:
   contents: write
@@ -23,7 +23,6 @@ jobs:
   revisar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
