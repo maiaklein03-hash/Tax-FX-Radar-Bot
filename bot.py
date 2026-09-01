@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
@@ -21,7 +22,9 @@ CNV_URL = "https://www.cnv.gov.ar/sitioWeb/MarcoRegulatorio?panel=2"
 BCRA_API = "https://www.bcra.gob.ar/api/endpoints/buscador-comunicaciones.php"
 BCRA_BASE = "https://www.bcra.gob.ar"
 BO_BASE = "https://www.boletinoficial.gob.ar"
-ESTADO = Path("estado.json")
+CARPETA = Path(__file__).resolve().parent
+ESTADO = CARPETA / "estado.json"
+ZONA_HORARIA = ZoneInfo("America/Argentina/Buenos_Aires")
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -75,7 +78,8 @@ MODELO ON CORPORATIVA
 - Carga Tributaria: artículo 36 y 36 bis Ley de ON; Ganancias sobre intereses y
   resultados por suscripción, tenencia, cobro o disposición; IVA; Bienes
   Personales/responsable sustituto; Débitos y Créditos aplicable a los pagos;
-  jurisdicciones no cooperantes; CDI/MLI cuando alteren el tratamiento de ON.
+  jurisdicciones no cooperantes; CDI/MLI; IIBB; Sellos; transmisión gratuita de
+  bienes y tasa de justicia cuando alteren el tratamiento de ON.
 
 MODELO TÍTULOS DE DEUDA PROVINCIALES
 - Cambiario: emisión e integración; ingreso y liquidación del producido;
@@ -89,7 +93,8 @@ MODELO TÍTULOS DE DEUDA PROVINCIALES
 
 
 def log(mensaje):
-    print(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] {mensaje}", flush=True)
+    momento = datetime.now(ZONA_HORARIA).strftime("%d/%m/%Y %H:%M:%S")
+    print(f"[{momento}] {mensaje}", flush=True)
 
 
 def pedir(metodo, url, **kwargs):
@@ -114,15 +119,22 @@ def cargar_estado():
         return base
     try:
         base.update(json.loads(ESTADO.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError):
-        pass
+    except (OSError, json.JSONDecodeError, TypeError) as error:
+        raise RuntimeError(
+            "estado.json está dañado; se detiene para evitar omisiones o duplicados."
+        ) from error
     return base
 
 
 def guardar_estado(estado):
     for fuente, limite in (("cnv", 1500), ("bcra", 3000), ("bo", 2500)):
         estado[fuente] = estado.get(fuente, [])[-limite:]
-    ESTADO.write_text(json.dumps(estado, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporal = ESTADO.with_suffix(".json.tmp")
+    temporal.write_text(
+        json.dumps(estado, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporal, ESTADO)
 
 
 def obtener_cnv():
@@ -150,7 +162,7 @@ def obtener_cnv():
 
 
 def obtener_bcra():
-    hasta = date.today()
+    hasta = datetime.now(ZONA_HORARIA).date()
     desde = hasta - timedelta(days=8)
     data = pedir("POST", BCRA_API, data={
         "mode": "fecha", "fecha_desde": desde.isoformat(),
@@ -207,7 +219,8 @@ def obtener_bo():
             })
         return fecha, encontrados
 
-    fechas = [date.today() - timedelta(days=i) for i in range(5)]
+    hoy = datetime.now(ZONA_HORARIA).date()
+    fechas = [hoy - timedelta(days=i) for i in range(5)]
     with ThreadPoolExecutor(max_workers=5) as ejecutor:
         futuros = [ejecutor.submit(descargar_fecha, fecha) for fecha in fechas]
         resultados = [f.result() for f in as_completed(futuros)]
@@ -225,12 +238,14 @@ def obtener_bo():
 def candidato(norma):
     texto = f"{norma.get('seccion', '')} {norma.get('titulo', '')}".lower()
     if norma["fuente"] == "bcra":
-        # Las A son normativas; B/C solo pasan si el asunto es cambiario relevante.
-        return (norma.get("tipo") == "A" and any(k in texto for k in CLAVES_FX)) or (
+        # Toda Comunicación A nueva se lee: títulos genéricos como "Adecuaciones"
+        # pueden modificar una regla de emisión o pago. B/C conservan filtro barato.
+        return norma.get("tipo") == "A" or (
             norma.get("tipo") in {"B", "C"} and any(k in texto for k in CLAVES_FX)
         )
     if norma["fuente"] == "cnv":
-        return any(k in texto for k in CLAVES_CNV)
+        # Las resoluciones generales son pocas y pueden tener títulos inespecíficos.
+        return True
     es_rg_arca = (
         ("agencia de recaudación" in texto or "agencia de recaudacion" in texto)
         and "resolución general" in texto
@@ -258,6 +273,20 @@ def obtener_texto(norma):
     return "\n".join(
         linea.strip() for linea in soup.get_text("\n").splitlines() if linea.strip()
     )[:65000]
+
+
+def error_gemini_reintentable(error):
+    detalle = str(error).lower()
+    no_reintentables = (
+        "400", "404", "429", "invalid_argument", "not_found",
+        "resource_exhausted", "quota",
+    )
+    if any(codigo in detalle for codigo in no_reintentables):
+        return False
+    return any(
+        codigo in detalle
+        for codigo in ("500", "503", "504", "unavailable", "high demand", "deadline")
+    )
 
 
 def evaluar_y_resumir(norma, texto):
@@ -327,25 +356,40 @@ TEXTO OFICIAL
 """
     cliente = genai.Client(api_key=GEMINI_API_KEY)
     ultimo = None
-    for intento in range(4):
+    for intento in range(1, 3):
         try:
-            r = cliente.models.generate_content(model="gemini-3.6-flash", contents=prompt)
+            r = cliente.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt,
+            )
             if r.text:
                 return r.text.strip()
+            raise RuntimeError("Gemini no devolvió texto.")
         except Exception as error:
             ultimo = error
-            if intento < 3:
-                time.sleep(5 * (intento + 1))
+            log(f"Gemini falló (intento {intento}/2): {error}")
+            if intento >= 2 or not error_gemini_reintentable(error):
+                break
+            time.sleep(12)
     raise RuntimeError(f"Gemini no respondió: {ultimo}")
 
 
 def enviar(texto):
-    r = pedir("POST", f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={
-        "chat_id": TELEGRAM_CHAT_ID, "text": texto,
-        "disable_web_page_preview": True,
-    }).json()
-    if not r.get("ok"):
-        raise RuntimeError(r)
+    # No se reintenta automáticamente un POST: si Telegram lo aceptó pero se
+    # perdió la respuesta, repetirlo podría duplicar el mensaje.
+    respuesta = requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+        json={
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": texto,
+            "disable_web_page_preview": True,
+        },
+        timeout=50,
+    )
+    respuesta.raise_for_status()
+    resultado = respuesta.json()
+    if not resultado.get("ok"):
+        raise RuntimeError(resultado)
 
 
 def analizar(norma):
@@ -400,6 +444,12 @@ def ejecutar():
     for norma in nuevas:
         try:
             enviadas += int(analizar(norma))
+            # Persistir cada resultado evita repetir alertas ya enviadas si una
+            # norma posterior falla o el runner se interrumpe.
+            historial = estado.setdefault(norma["fuente"], [])
+            if norma["id"] not in historial:
+                historial.append(norma["id"])
+                guardar_estado(estado)
         except Exception as error:
             # No se marca como revisada: se volverá a intentar en la próxima corrida.
             fallidas.add(norma["id"])
