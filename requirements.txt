@@ -1,5 +1,5 @@
 beautifulsoup4==4.13.4
-google-genai==1.29.0
+google-genai>=2.3.0,<3
 pypdf==5.9.0
 python-dotenv==1.1.1
 requests==2.32.4
